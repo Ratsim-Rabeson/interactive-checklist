@@ -180,7 +180,7 @@
   }
 
   function typeLabel(t) {
-    return ({ normal: "NORMAL", abnormal: "ABNORMAL", emergency: "EMERGENCY" }[t] || "NORMAL");
+    return ({ normal: "NORMAL", abnormal: "ABNORMAL", emergency: "EMERGENCY", briefing: "BRIEFING" }[t] || "NORMAL");
   }
 
   function renderChecklist() {
@@ -208,7 +208,7 @@
     $("#chTitle").textContent = checklist.name;
     const badge = $("#chBadge");
     badge.textContent = typeLabel(gtype);
-    badge.className = "ch-badge" + (gtype === "emergency" ? " emergency" : gtype === "abnormal" ? " abnormal" : "");
+    badge.className = "ch-badge" + (gtype === "emergency" ? " emergency" : gtype === "abnormal" ? " abnormal" : gtype === "briefing" ? " briefing" : "");
 
     items.innerHTML = checklist.items.map((it, idx) => renderItemRow(set.id, checklist.id, it, idx)).join("") ||
       `<div class="empty-state"><p>This checklist has no items yet.</p></div>`;
@@ -453,7 +453,7 @@
     for (const g of groups) {
       if (!g || !Array.isArray(g.checklists)) continue;
       const grp = { id: g.id || uid("grp"), name: String(g.name || "Group"),
-        type: ["normal", "abnormal", "emergency"].includes(g.type) ? g.type : "normal", checklists: [] };
+        type: ["normal", "abnormal", "emergency", "briefing"].includes(g.type) ? g.type : "normal", checklists: [] };
       for (const c of g.checklists) {
         if (!c) continue;
         const cl = { id: c.id || uid("cl"), name: String(c.name || "Checklist"), items: [] };
@@ -518,6 +518,7 @@
             <option value="normal" ${g.type === "normal" || !g.type ? "selected" : ""}>Normal</option>
             <option value="abnormal" ${g.type === "abnormal" ? "selected" : ""}>Abnormal</option>
             <option value="emergency" ${g.type === "emergency" ? "selected" : ""}>Emergency</option>
+            <option value="briefing" ${g.type === "briefing" ? "selected" : ""}>Briefing</option>
           </select>
           <button class="mini-btn" data-action="move-group" data-g="${esc(g.id)}" data-dir="-1" ${gi === 0 ? "disabled style=opacity:.3" : ""}>↑</button>
           <button class="mini-btn" data-action="move-group" data-g="${esc(g.id)}" data-dir="1" ${gi === groupCount - 1 ? "disabled style=opacity:.3" : ""}>↓</button>

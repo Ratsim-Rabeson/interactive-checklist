@@ -15,7 +15,7 @@ to **build your own checklists** or **import/export** them as JSON.
 - **Garmin-style challenge → response items** with dot leaders (`FUEL SELECTOR ···· BOTH`).
 - **Tap to check** with satisfying animation, live progress ring, and per-checklist progress badges.
 - **Light & dark themes** — tap the ☀️/🌙 in the top bar. Follows your device setting by default and remembers your choice.
-- **Color-coded groups**: Normal (cyan), Abnormal (amber), Emergency (red).
+- **Color-coded groups**: Normal (cyan), Briefing (blue), Abnormal (amber), Emergency (red).
 - **Advisory rows**: `note`, `caution`, and `warning` lines that aren't checkable.
 - **CHECKLIST COMPLETE** banner + one-tap **Next** to flow through a procedure.
 - **Scratchpad** (📄 in the top bar) — a slide-in pad for jotting clearances and info while flying:
@@ -60,7 +60,7 @@ and visit `http://localhost:8000`. Arrow keys ← / → move between checklists.
 Tap the **✎ pencil** in the top bar to open the Builder. You can:
 
 - Rename the set / tail number.
-- Add **Groups** and choose a type (Normal / Abnormal / Emergency — sets the color).
+- Add **Groups** and choose a type (Normal / Briefing / Abnormal / Emergency — sets the color).
 - Add **Checklists** to a group.
 - Add **Items** of four kinds: **Item** (challenge + response), **Note**, **Caution**, **Warning**.
 - Reorder with ↑ / ↓, edit with ✎, remove with ✕. Everything saves automatically.
@@ -102,7 +102,7 @@ it accepts a full export, a bare set, an array of sets, or a single group.
 }
 ```
 
-- `group.type` ∈ `normal` | `abnormal` | `emergency`
+- `group.type` ∈ `normal` | `briefing` | `abnormal` | `emergency`
 - `item.type` ∈ `item` | `note` | `caution` | `warning`
   - `item` uses `challenge` + `response`; the others use `text`.
 

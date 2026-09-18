@@ -123,6 +123,41 @@ window.DEFAULT_SETS = [
         ]
       },
       {
+        id: "briefing",
+        name: "Briefings",
+        type: "briefing",
+        checklists: [
+          {
+            id: "takeoff-briefing",
+            name: "Takeoff Briefing",
+            items: [
+              { type: "note", text: "Brief aloud before taxiing onto the runway." },
+              { type: "item", challenge: "Departure Runway", response: "CONFIRM" },
+              { type: "item", challenge: "Rotate (Vr)", response: "55 KIAS" },
+              { type: "item", challenge: "Initial Climb", response: "Vy 74 KIAS" },
+              { type: "item", challenge: "Abort Point", response: "IDENTIFY" },
+              { type: "caution", text: "Malfunction before rotation: throttle idle, brake, stop on remaining runway." },
+              { type: "item", challenge: "Failure After Rotation", response: "LOWER NOSE / LAND AHEAD" },
+              { type: "item", challenge: "Initial Heading & Altitude", response: "RUNWAY HDG / 1000 ft AGL" }
+            ]
+          },
+          {
+            id: "approach-briefing",
+            name: "Approach & Landing Briefing",
+            items: [
+              { type: "note", text: "Brief during descent, before the approach." },
+              { type: "item", challenge: "Landing Runway", response: "CONFIRM" },
+              { type: "item", challenge: "Approach Type", response: "VISUAL / INSTRUMENT" },
+              { type: "item", challenge: "Final Approach Speed", response: "65 KIAS" },
+              { type: "item", challenge: "Landing Flaps", response: "FULL" },
+              { type: "item", challenge: "Go-Around", response: "FULL POWER, FLAPS 20, CLIMB Vy" },
+              { type: "item", challenge: "Missed Approach / Traffic Pattern", response: "REVIEW" },
+              { type: "note", text: "Confirm taxi-off and parking intentions." }
+            ]
+          }
+        ]
+      },
+      {
         id: "abnormal",
         name: "Abnormal Procedures",
         type: "abnormal",
