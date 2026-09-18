@@ -113,6 +113,8 @@
     applyTheme(state.settings.theme, false);
     hydrateScratch();   // must run before wireEvents (it populates scratchEls used during wiring)
     wireEvents();
+    hydratePdf();
+    wirePdf();
     render();
     registerSW();
   }
@@ -1054,17 +1056,344 @@
       if (e.key === "Escape") {
         if (!$("#itemScrim").hidden) { $("#itemScrim").hidden = true; itemCtx = null; }
         else if (!$("#builderScrim").hidden) closeBuilder();
+        else if (pdfPanelOpen()) closePdf();
         else if (scratchOpen()) closeScratch();
         else if (!$("#popover").hidden) closePopover();
         else if ($("#app").classList.contains("nav-open")) $("#app").classList.remove("nav-open");
         return;
       }
       const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
-      const overlayOpen = !$("#builderScrim").hidden || !$("#itemScrim").hidden || scratchOpen();
+      const overlayOpen = !$("#builderScrim").hidden || !$("#itemScrim").hidden || scratchOpen() || pdfPanelOpen();
       if (typing || overlayOpen) return;
       if (e.key === "ArrowRight" && !$("#nextBtn").disabled) gotoAdjacent(1);
       else if (e.key === "ArrowLeft" && !$("#prevBtn").disabled) gotoAdjacent(-1);
     });
+  }
+
+  /* ============================================================ PDF DOCUMENTS
+     Import PDFs, store them in IndexedDB (binary — localStorage can't), and
+     read them full-screen with PDF.js. Pages render lazily (IntersectionObserver)
+     so a 200-page POH stays responsive on an iPad. */
+  const PDF_DB = "icl-pdfs";
+  const PDF_DOC_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 3v5h5M8.5 13h7M8.5 16.5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+  const pdfEls = {};
+  let pdfDoc = null;         // active PDF.js document
+  let pdfObserver = null;    // lazy-render observer
+  let pdfRenderTasks = [];   // in-flight render tasks (cancel on teardown)
+  let pdfRatio = 1.414;      // page height/width estimate for placeholders
+  let pdfZoom = 1;
+  let pdfScrollRaf = 0;
+
+  /* ---- IndexedDB: two stores keep the list light (blob loaded only to read) ---- */
+  function pdfDBOpen() {
+    return new Promise((resolve, reject) => {
+      if (!("indexedDB" in window)) { reject(new Error("no-idb")); return; }
+      const req = indexedDB.open(PDF_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("blob")) db.createObjectStore("blob", { keyPath: "id" });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function pdfReq(request) {
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+  async function pdfAdd(file) {
+    const db = await pdfDBOpen();
+    const meta = { id: uid("pdf"), name: file.name || "document.pdf", size: file.size || 0, addedAt: Date.now() };
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(["meta", "blob"], "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error("abort"));
+      tx.objectStore("meta").put(meta);
+      tx.objectStore("blob").put({ id: meta.id, blob: file });
+    });
+    db.close();
+    return meta;
+  }
+  async function pdfListMeta() {
+    const db = await pdfDBOpen();
+    const list = await pdfReq(db.transaction("meta", "readonly").objectStore("meta").getAll());
+    db.close();
+    return (list || []).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  }
+  async function pdfGetBlob(id) {
+    const db = await pdfDBOpen();
+    const rec = await pdfReq(db.transaction("blob", "readonly").objectStore("blob").get(id));
+    db.close();
+    return rec ? rec.blob : null;
+  }
+  async function pdfRename(id, name) {
+    const db = await pdfDBOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("meta", "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      const metaStore = tx.objectStore("meta");
+      const g = metaStore.get(id);
+      g.onsuccess = () => { const rec = g.result; if (rec) { rec.name = name; metaStore.put(rec); } };
+    });
+    db.close();
+  }
+  async function pdfDelete(id) {
+    const db = await pdfDBOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(["meta", "blob"], "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore("meta").delete(id);
+      tx.objectStore("blob").delete(id);
+    });
+    db.close();
+  }
+
+  /* ---- formatting ---- */
+  function fmtBytes(n) {
+    n = n || 0;
+    if (n < 1024) return n + " o";
+    if (n < 1048576) return Math.round(n / 1024) + " Ko";
+    return (n / 1048576).toFixed(1) + " Mo";
+  }
+  function fmtDate(ts) {
+    if (!ts) return "";
+    try { return new Date(ts).toLocaleDateString(); } catch (e) { return ""; }
+  }
+
+  /* ---- element cache + setup ---- */
+  function hydratePdf() {
+    pdfEls.panel = $("#pdfPanel");
+    if (!pdfEls.panel) return;
+    pdfEls.scrim = $("#pdfScrim");
+    pdfEls.library = $("#pdfLibrary");
+    pdfEls.list = $("#pdfList");
+    pdfEls.empty = $("#pdfEmpty");
+    pdfEls.viewer = $("#pdfViewer");
+    pdfEls.pages = $("#pdfPages");
+    pdfEls.docName = $("#pdfDocName");
+    pdfEls.pageInfo = $("#pdfPageInfo");
+    pdfEls.fileInput = $("#pdfFileInput");
+    pdfEls.dot = $("#pdfDot");
+    if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdfjs/pdf.worker.min.js";
+    refreshPdfDot();
+  }
+
+  function pdfPanelOpen() { return !!(pdfEls.panel && pdfEls.panel.classList.contains("open")); }
+
+  function openPdf() {
+    if (!pdfEls.panel) return;
+    showPdfLibrary();
+    pdfEls.panel.classList.add("open");
+    pdfEls.scrim.classList.add("open");
+    renderPdfList();
+  }
+  function closePdf() {
+    if (!pdfEls.panel) return;
+    pdfEls.panel.classList.remove("open");
+    pdfEls.scrim.classList.remove("open");
+    teardownPdfDoc();
+    pdfEls.pages.innerHTML = "";
+  }
+  function showPdfLibrary() { pdfEls.library.hidden = false; pdfEls.viewer.hidden = true; }
+  function showPdfViewer() { pdfEls.library.hidden = true; pdfEls.viewer.hidden = false; }
+
+  /* ---- library ---- */
+  async function renderPdfList() {
+    let metas = [];
+    try { metas = await pdfListMeta(); }
+    catch (e) { pdfEls.list.innerHTML = `<div class="pdf-msg">Stockage indisponible sur cet appareil.</div>`; pdfEls.empty.hidden = true; return; }
+    refreshPdfDot(metas.length);
+    pdfEls.empty.hidden = metas.length > 0;
+    pdfEls.list.innerHTML = metas.map((m) => `
+      <div class="pdf-row" data-id="${esc(m.id)}">
+        <button class="pdf-open" data-id="${esc(m.id)}">
+          <span class="pdf-ic">${PDF_DOC_SVG}</span>
+          <span class="pdf-info">
+            <span class="pdf-name">${esc(m.name)}</span>
+            <span class="pdf-sub">${esc(fmtBytes(m.size))} · ${esc(fmtDate(m.addedAt))}</span>
+          </span>
+        </button>
+        <button class="pdf-mini" data-action="rename" data-id="${esc(m.id)}" aria-label="Renommer" title="Renommer">✎</button>
+        <button class="pdf-mini danger" data-action="delete" data-id="${esc(m.id)}" aria-label="Supprimer" title="Supprimer">✕</button>
+      </div>`).join("");
+  }
+
+  async function refreshPdfDot(count) {
+    if (!pdfEls.dot) return;
+    let n = count;
+    if (typeof n !== "number") { try { n = (await pdfListMeta()).length; } catch (e) { n = 0; } }
+    pdfEls.dot.hidden = !(n > 0);
+  }
+
+  function pdfPickFiles() { pdfEls.fileInput.value = ""; pdfEls.fileInput.click(); }
+
+  async function pdfOnFiles(fileList) {
+    const files = Array.from(fileList || []).filter((f) => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+    if (!files.length) { toast("Aucun PDF sélectionné"); return; }
+    let ok = 0;
+    for (const f of files) { try { await pdfAdd(f); ok++; } catch (e) { console.error("pdf add failed", e); } }
+    await renderPdfList();
+    toast(ok ? (ok === 1 ? "1 PDF ajouté" : ok + " PDF ajoutés") : "Échec de l'import");
+  }
+
+  async function onPdfListClick(e) {
+    const actBtn = e.target.closest("[data-action]");
+    if (actBtn) {
+      const id = actBtn.dataset.id;
+      if (actBtn.dataset.action === "delete") {
+        if (!confirm("Supprimer ce document ?")) return;
+        try { await pdfDelete(id); } catch (e2) {}
+        await renderPdfList();
+        toast("Document supprimé");
+      } else if (actBtn.dataset.action === "rename") {
+        const row = actBtn.closest(".pdf-row");
+        const cur = row ? row.querySelector(".pdf-name").textContent : "";
+        const name = prompt("Nouveau nom :", cur);
+        if (name && name.trim()) { try { await pdfRename(id, name.trim()); } catch (e2) {} await renderPdfList(); }
+      }
+      return;
+    }
+    const openBtn = e.target.closest(".pdf-open");
+    if (openBtn) openPdfDoc(openBtn.dataset.id, openBtn.querySelector(".pdf-name").textContent);
+  }
+
+  /* ---- viewer (PDF.js) ---- */
+  function pdfPageWidth() {
+    const w = (pdfEls.pages && pdfEls.pages.clientWidth) || 800;
+    return Math.max(220, w - 24) * pdfZoom;
+  }
+
+  function teardownPdfDoc() {
+    if (pdfObserver) { pdfObserver.disconnect(); pdfObserver = null; }
+    if (pdfEls.pages) pdfEls.pages.onscroll = null;
+    pdfRenderTasks.forEach((t) => { try { t.cancel(); } catch (e) {} });
+    pdfRenderTasks = [];
+    if (pdfDoc) { try { pdfDoc.destroy(); } catch (e) {} pdfDoc = null; }
+  }
+
+  async function openPdfDoc(id, name) {
+    showPdfViewer();
+    pdfEls.docName.textContent = name || "";
+    pdfEls.pageInfo.textContent = "…";
+    pdfZoom = 1;
+    pdfEls.pages.innerHTML = `<div class="pdf-msg">Chargement…</div>`;
+    if (!window.pdfjsLib) { pdfEls.pages.innerHTML = `<div class="pdf-msg">Lecteur PDF indisponible — rechargez l'app une fois en ligne.</div>`; return; }
+    let blob = null;
+    try { blob = await pdfGetBlob(id); } catch (e) {}
+    if (!blob) { pdfEls.pages.innerHTML = `<div class="pdf-msg">Document introuvable.</div>`; return; }
+    let buf;
+    try { buf = await blob.arrayBuffer(); } catch (e) { pdfEls.pages.innerHTML = `<div class="pdf-msg">Lecture impossible.</div>`; return; }
+    teardownPdfDoc();
+    try { pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise; }
+    catch (e) { pdfEls.pages.innerHTML = `<div class="pdf-msg">Impossible d'ouvrir ce PDF.</div>`; return; }
+    await buildPdfPages();
+  }
+
+  async function buildPdfPages() {
+    const n = pdfDoc.numPages;
+    try {
+      const p1 = await pdfDoc.getPage(1);
+      const vp = p1.getViewport({ scale: 1 });
+      pdfRatio = vp.height / vp.width;
+    } catch (e) { pdfRatio = 1.414; }
+    const w = pdfPageWidth();
+    pdfEls.pages.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    for (let i = 1; i <= n; i++) {
+      const el = document.createElement("div");
+      el.className = "pdf-page";
+      el.dataset.page = String(i);
+      el.style.width = w + "px";
+      el.style.height = Math.round(w * pdfRatio) + "px";
+      frag.appendChild(el);
+    }
+    pdfEls.pages.appendChild(frag);
+    setupPdfObserver();
+    pdfEls.pageInfo.textContent = "1 / " + n;
+  }
+
+  function setupPdfObserver() {
+    if (pdfObserver) pdfObserver.disconnect();
+    pdfObserver = new IntersectionObserver((entries) => {
+      entries.forEach((en) => { if (en.isIntersecting) renderPdfPage(en.target); });
+    }, { root: pdfEls.pages, rootMargin: "400px 0px" });
+    $$(".pdf-page", pdfEls.pages).forEach((el) => pdfObserver.observe(el));
+    pdfEls.pages.onscroll = pdfOnScroll;
+  }
+
+  async function renderPdfPage(el) {
+    if (!pdfDoc || el.dataset.rendered === "1" || el.dataset.rendering === "1") return;
+    el.dataset.rendering = "1";
+    const num = parseInt(el.dataset.page, 10);
+    let page;
+    try { page = await pdfDoc.getPage(num); } catch (e) { el.dataset.rendering = ""; return; }
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = pdfPageWidth();
+    const base = cssW / page.getViewport({ scale: 1 }).width;
+    const viewport = page.getViewport({ scale: base * dpr });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    canvas.style.width = cssW + "px";
+    canvas.style.height = Math.floor(viewport.height / dpr) + "px";
+    el.style.height = canvas.style.height;
+    const task = page.render({ canvasContext: canvas.getContext("2d"), viewport });
+    pdfRenderTasks.push(task);
+    try { await task.promise; el.innerHTML = ""; el.appendChild(canvas); el.dataset.rendered = "1"; }
+    catch (e) { /* cancelled */ }
+    el.dataset.rendering = "";
+    pdfRenderTasks = pdfRenderTasks.filter((t) => t !== task);
+  }
+
+  function pdfSetZoom(delta) {
+    if (!pdfDoc) return;
+    const next = Math.min(3, Math.max(0.5, Math.round((pdfZoom + delta) * 100) / 100));
+    if (next === pdfZoom) return;
+    pdfZoom = next;
+    const w = pdfPageWidth();
+    $$(".pdf-page", pdfEls.pages).forEach((el) => {
+      el.dataset.rendered = ""; el.dataset.rendering = "";
+      el.innerHTML = "";
+      el.style.width = w + "px";
+      el.style.height = Math.round(w * pdfRatio) + "px";
+    });
+    setupPdfObserver();
+  }
+
+  function pdfOnScroll() {
+    if (pdfScrollRaf) return;
+    pdfScrollRaf = requestAnimationFrame(() => {
+      pdfScrollRaf = 0;
+      if (!pdfDoc) return;
+      const pages = $$(".pdf-page", pdfEls.pages);
+      if (!pages.length) return;
+      const mid = pdfEls.pages.scrollTop + pdfEls.pages.clientHeight / 2;
+      let cur = 1;
+      for (const el of pages) { if (el.offsetTop <= mid) cur = parseInt(el.dataset.page, 10); else break; }
+      pdfEls.pageInfo.textContent = cur + " / " + pdfDoc.numPages;
+    });
+  }
+
+  function wirePdf() {
+    if (!pdfEls.panel) return;
+    $("#pdfBtn").addEventListener("click", openPdf);
+    $("#pdfClose").addEventListener("click", closePdf);
+    pdfEls.scrim.addEventListener("click", closePdf);
+    $("#pdfImportBtn").addEventListener("click", pdfPickFiles);
+    const emptyImport = $("#pdfEmptyImport");
+    if (emptyImport) emptyImport.addEventListener("click", pdfPickFiles);
+    pdfEls.fileInput.addEventListener("change", (e) => pdfOnFiles(e.target.files));
+    $("#pdfBack").addEventListener("click", () => { teardownPdfDoc(); pdfEls.pages.innerHTML = ""; showPdfLibrary(); });
+    $("#pdfZoomIn").addEventListener("click", () => pdfSetZoom(0.25));
+    $("#pdfZoomOut").addEventListener("click", () => pdfSetZoom(-0.25));
+    pdfEls.list.addEventListener("click", onPdfListClick);
   }
 
   function registerSW() {

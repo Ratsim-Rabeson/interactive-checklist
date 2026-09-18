@@ -748,3 +748,96 @@ body {
 @media (hover: none) {
   .item { padding: 17px 18px; }
 }
+
+/* ============================================================ PDF documents */
+.pdf-scrim {
+  position: fixed; inset: 0; z-index: 82;
+  background: rgba(4,8,14,0.5);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.pdf-scrim.open { opacity: 1; pointer-events: auto; }
+
+.pdf-panel {
+  position: fixed; inset: 0; z-index: 85;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, var(--bg-1), var(--bg-0));
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.2,0.8,0.2,1);
+  pointer-events: none;
+  padding-top: var(--safe-t); padding-bottom: var(--safe-b);
+  padding-left: var(--safe-l); padding-right: var(--safe-r);
+}
+.pdf-panel.open { transform: translateY(0); pointer-events: auto; }
+
+.pdf-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 14px 12px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pdf-head-title { display: flex; align-items: center; gap: 9px; color: var(--accent-2); }
+.pdf-head-title span { font-size: 13px; font-weight: 800; letter-spacing: 2.5px; }
+.pdf-head-actions { display: flex; align-items: center; gap: 8px; }
+
+/* library */
+.pdf-library { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px calc(16px + var(--safe-b)); }
+.pdf-list { display: flex; flex-direction: column; gap: 8px; max-width: 820px; margin: 0 auto; }
+.pdf-row {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 12px;
+  padding: 6px 8px 6px 6px;
+}
+.pdf-open {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 12px;
+  background: transparent; border: none; color: var(--txt);
+  text-align: left; cursor: pointer; padding: 8px; border-radius: 9px;
+}
+.pdf-open:active { transform: scale(0.995); }
+.pdf-ic {
+  flex: 0 0 auto; width: 36px; height: 36px;
+  display: grid; place-items: center;
+  color: var(--accent-2); background: rgba(18,182,255,0.12); border-radius: 9px;
+}
+.pdf-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pdf-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pdf-sub { font-size: 12px; color: var(--txt-faint); }
+.pdf-mini {
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px;
+  border: 1px solid var(--line-soft); background: var(--panel-2); color: var(--txt-dim);
+  font-size: 14px; cursor: pointer;
+  transition: transform 0.1s ease, color 0.15s, border-color 0.15s;
+}
+.pdf-mini:active { transform: scale(0.92); }
+.pdf-mini.danger:hover { color: var(--red); border-color: rgba(255,90,95,0.4); }
+
+.pdf-empty {
+  max-width: 420px; margin: 12vh auto 0; text-align: center; color: var(--txt-faint);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.pdf-empty p { margin: 0; font-size: 15px; }
+
+/* viewer */
+.pdf-viewer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pdf-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--line-soft); background: var(--bg-1);
+}
+.pdf-docname { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pdf-pageinfo { flex: 0 0 auto; font-size: 12.5px; color: var(--txt-dim); font-variant-numeric: tabular-nums; }
+.pdf-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
+
+.pdf-pages {
+  flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; position: relative;
+  padding: 16px 12px calc(24px + var(--safe-b));
+  background: var(--bg-0);
+}
+.pdf-page {
+  position: relative; margin: 0 auto 14px;
+  background: #fff; border-radius: 4px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); overflow: hidden;
+}
+.pdf-page:last-child { margin-bottom: 0; }
+.pdf-page canvas { display: block; width: 100%; height: auto; }
+.pdf-msg { margin: 12vh auto; max-width: 340px; text-align: center; color: var(--txt-faint); font-size: 15px; }

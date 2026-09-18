@@ -55,6 +55,10 @@
           <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M8.5 12h7M8.5 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
           <span class="dot-badge" id="scratchDot" hidden></span>
         </button>
+        <button class="icon-btn" id="pdfBtn" aria-label="Documents PDF" title="Documents PDF">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M13 3v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><text x="11.5" y="18.2" text-anchor="middle" font-size="6.2" font-weight="800" letter-spacing="0.2" fill="currentColor">PDF</text></svg>
+          <span class="dot-badge" id="pdfDot" hidden></span>
+        </button>
         <button class="icon-btn" id="editBtn" aria-label="Edit checklists" title="Edit / Build">
           <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><path d="M13.5 6.5l3 3" stroke="currentColor" stroke-width="1.8"/></svg>
         </button>
@@ -183,6 +187,47 @@
     </div>
   </aside>
 
+  <!-- ============ PDF DOCUMENTS ============ -->
+  <div class="pdf-scrim" id="pdfScrim"></div>
+  <section class="pdf-panel" id="pdfPanel" aria-label="Documents PDF">
+    <div class="pdf-head">
+      <div class="pdf-head-title">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M13 3v5h5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg>
+        <span>DOCUMENTS</span>
+      </div>
+      <div class="pdf-head-actions">
+        <button class="btn ghost small" id="pdfImportBtn">⭱ Importer</button>
+        <button class="icon-btn" id="pdfClose" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="pdf-library" id="pdfLibrary">
+      <div class="pdf-list" id="pdfList"></div>
+      <div class="pdf-empty" id="pdfEmpty" hidden>
+        <svg viewBox="0 0 24 24" width="46" height="46" aria-hidden="true"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M13 3v5h5M8.5 13h7M8.5 16.5h5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p>Aucun document importé.</p>
+        <button class="btn primary" id="pdfEmptyImport">Importer un PDF</button>
+      </div>
+    </div>
+
+    <div class="pdf-viewer" id="pdfViewer" hidden>
+      <div class="pdf-bar">
+        <button class="btn ghost small" id="pdfBack">← Documents</button>
+        <span class="pdf-docname" id="pdfDocName"></span>
+        <span class="pdf-pageinfo" id="pdfPageInfo">—</span>
+        <span class="pdf-zoom">
+          <button class="icon-btn" id="pdfZoomOut" aria-label="Zoom arrière" title="Zoom arrière"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn" id="pdfZoomIn" aria-label="Zoom avant" title="Zoom avant"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        </span>
+      </div>
+      <div class="pdf-pages" id="pdfPages"></div>
+    </div>
+
+    <input type="file" id="pdfFileInput" accept="application/pdf,.pdf" multiple hidden />
+  </section>
+
   <!-- ============ OVERFLOW MENU ============ -->
   <div class="popover" id="popover" hidden>
     <button data-action="new-set">＋ New checklist set</button>
@@ -259,6 +304,7 @@
   <!-- Toast -->
   <div class="toast" id="toast" hidden></div>
 
+  <script src="./vendor/pdfjs/pdf.min.js"></script>
   <script src="./data.js"></script>
   <script src="./app.js"></script>
 </body>

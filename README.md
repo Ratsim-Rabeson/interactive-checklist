@@ -19,11 +19,12 @@ to **build your own checklists** or **import/export** them as JSON.
 - **Advisory rows**: `note`, `caution`, and `warning` lines that aren't checkable.
 - **CHECKLIST COMPLETE** banner + one-tap **Next** to flow through a procedure.
 - **Scratchpad** (📄 in the top bar) — a slide-in pad for jotting clearances and info while flying:
-  - Quick avionics fields: **ATIS · Squawk · Altimeter · Active RWY**.
+  - Quick avionics fields: **ATIS · Squawk · Altimeter · Active RWY · Active Freq · Next Freq**.
   - A free-text **Notes** area (great for CRAFT clearances, frequencies, headings).
   - A finger/stylus **Sketch** canvas with four pen colors, an eraser, and clear.
   - Everything auto-saves locally; a dot on the icon shows when it has content.
 - **Builder** — create/edit/reorder groups, checklists, and items entirely in the app.
+- **PDF documents** — a dedicated button (between the scratchpad and edit icons) opens a PDF library: import one or more PDFs (POH, VAC charts, airport diagrams) and read any of them full-screen with lazy page-by-page rendering and zoom. Files are stored on-device (`IndexedDB`) so they persist across restarts and work offline. Rendering uses a bundled copy of [PDF.js](https://mozilla.github.io/pdf.js/).
 - **Import / Export** checklists as `.json`, and keep multiple **aircraft sets**.
 - **Works offline**, installs to the iPad home screen as a full-screen app.
 - **No build step, no server required, no accounts.** Everything is saved locally on the device.
@@ -114,9 +115,11 @@ it accepts a full export, a bare set, an array of sets, or a single group.
 |------|---------|
 | `index.html` | App shell / markup |
 | `styles.css` | Avionics-inspired theme & layout |
-| `app.js` | State, rendering, interactions, builder, import/export |
+| `app.js` | State, rendering, interactions, builder, import/export, PDF reader |
 | `data.js` | Default sample checklist set (loaded as a global for `file://` use) |
+| `vendor/pdfjs/` | Bundled [PDF.js](https://mozilla.github.io/pdf.js/) (v3.11.174) for the PDF reader |
 | `manifest.webmanifest`, `sw.js`, `icon.svg` | PWA install + offline support |
 
-Data is stored in the browser's `localStorage` on the device — clearing Safari data resets it,
-so **Export** anything you want to keep.
+Checklists, progress, and scratchpad notes are stored in the browser's `localStorage`; imported
+PDFs live in `IndexedDB`. Both are on-device — clearing Safari data resets them, so **Export**
+anything you want to keep (and hold on to the original PDFs).

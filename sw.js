@@ -1,12 +1,14 @@
 /* Minimal offline cache. Only active when served over http(s); ignored on file://. */
-const CACHE = "icl-v5";
+const CACHE = "icl-v6";
 const ASSETS = [
   "./index.html",
   "./styles.css",
   "./data.js",
   "./app.js",
   "./manifest.webmanifest",
-  "./icon.svg"
+  "./icon.svg",
+  "./vendor/pdfjs/pdf.min.js",
+  "./vendor/pdfjs/pdf.worker.min.js"
 ];
 
 self.addEventListener("install", (e) => {
