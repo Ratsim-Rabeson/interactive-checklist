@@ -22,7 +22,7 @@
     activeChecklistId: null,
     progress: {},   // { setId: { checklistId: [checkedIdx...] } }
     settings: { autoAdvance: false },
-    scratch: { mode: "notes", fields: { atis: "", squawk: "", altimeter: "", runway: "" }, text: "", sketch: "" },
+    scratch: { mode: "notes", fields: { atis: "", squawk: "", altimeter: "", runway: "", freqActive: "", freqNext: "" }, text: "", sketch: "" },
   };
 
   /* ---------- tiny helpers ---------- */
@@ -95,7 +95,7 @@
     const sc = load(K.scratch, {}) || {};
     state.scratch = {
       mode: sc.mode === "sketch" ? "sketch" : "notes",
-      fields: Object.assign({ atis: "", squawk: "", altimeter: "", runway: "" }, sc.fields || {}),
+      fields: Object.assign({ atis: "", squawk: "", altimeter: "", runway: "", freqActive: "", freqNext: "" }, sc.fields || {}),
       text: typeof sc.text === "string" ? sc.text : "",
       sketch: typeof sc.sketch === "string" ? sc.sketch : "",
     };
@@ -712,6 +712,7 @@
     scratchEls.fields = {
       atis: $("#qf-atis"), squawk: $("#qf-squawk"),
       altimeter: $("#qf-altimeter"), runway: $("#qf-runway"),
+      freqActive: $("#qf-freq-active"), freqNext: $("#qf-freq-next"),
     };
     scratchEls.canvas = $("#sketchCanvas");
     scratchEls.hint = $("#canvasHint");

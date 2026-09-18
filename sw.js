@@ -1,5 +1,5 @@
 /* Minimal offline cache. Only active when served over http(s); ignored on file://. */
-const CACHE = "icl-v4";
+const CACHE = "icl-v5";
 const ASSETS = [
   "./index.html",
   "./styles.css",
