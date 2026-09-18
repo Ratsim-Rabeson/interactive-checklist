@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <title>Interactive Checklist</title>
+  <meta name="theme-color" content="#070b12" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Checklist" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script>
+    /* set theme before first paint to avoid a flash */
+    (function () {
+      try {
+        var s = JSON.parse(localStorage.getItem("icl.settings.v1") || "{}");
+        var t = (s && (s.theme === "light" || s.theme === "dark"))
+          ? s.theme
+          : ((window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark");
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+    })();
+  </script>
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- ============ TOP BAR ============ -->
+    <header class="topbar">
+      <button class="icon-btn menu-toggle" id="navToggle" aria-label="Menu">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
+
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M5 12l4 4 10-10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">CHECKLIST</span>
+          <span class="brand-sub" id="setLabel">—</span>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <label class="set-select-wrap" title="Active checklist set">
+          <select id="setSelect" class="set-select" aria-label="Active checklist set"></select>
+        </label>
+        <button class="icon-btn" id="themeBtn" aria-label="Switch theme" title="Light / Dark">
+          <svg class="ic-sun" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 2.5v2.4M12 19.1v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          <svg class="ic-moon" viewBox="0 0 24 24" width="20" height="20"><path d="M20 14.4A7.5 7.5 0 1 1 9.6 4a6 6 0 0 0 10.4 10.4z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="scratchBtn" aria-label="Scratchpad" title="Scratchpad">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M8.5 12h7M8.5 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <span class="dot-badge" id="scratchDot" hidden></span>
+        </button>
+        <button class="icon-btn" id="editBtn" aria-label="Edit checklists" title="Edit / Build">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><path d="M13.5 6.5l3 3" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+        <button class="icon-btn" id="menuBtn" aria-label="More" title="Import / Export">
+          <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="5" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="19" r="1.7" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="body">
+      <!-- ============ NAV / SIDEBAR ============ -->
+      <aside class="nav" id="nav" aria-label="Checklists">
+        <div class="nav-scroll" id="navList"></div>
+      </aside>
+      <div class="nav-scrim" id="navScrim"></div>
+
+      <!-- ============ MAIN CONTENT ============ -->
+      <main class="content" id="content">
+        <section class="checklist-head">
+          <div class="ch-head-left">
+            <span class="ch-badge" id="chBadge">NORMAL</span>
+            <h1 class="ch-title" id="chTitle">Select a checklist</h1>
+          </div>
+          <div class="ch-head-right">
+            <div class="progress-ring" id="progressRing" title="Progress">
+              <svg viewBox="0 0 44 44" width="52" height="52">
+                <circle class="ring-track" cx="22" cy="22" r="19" />
+                <circle class="ring-fill" id="ringFill" cx="22" cy="22" r="19" />
+              </svg>
+              <span class="progress-count" id="progressCount">0/0</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="items" id="items">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+              <svg viewBox="0 0 24 24" width="46" height="46"><rect x="4" y="3" width="16" height="18" rx="2.5" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <p>Pick a checklist from the left to begin.</p>
+          </div>
+        </section>
+
+        <div class="complete-banner" id="completeBanner" hidden>
+          <div class="cb-inner">
+            <svg viewBox="0 0 24 24" width="24" height="24"><path d="M5 12l4 4 10-10" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            <span>CHECKLIST COMPLETE</span>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ============ BOTTOM ACTION BAR ============ -->
+    <footer class="actionbar">
+      <button class="act-btn" id="prevBtn" aria-label="Previous checklist">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Prev</span>
+      </button>
+      <button class="act-btn reset" id="resetBtn">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 12a8 8 0 1 1 2.3 5.6M4 12V7m0 5h5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Reset</span>
+      </button>
+      <button class="act-btn primary" id="nextBtn" aria-label="Next checklist">
+        <span>Next</span>
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </footer>
+  </div>
+
+  <!-- ============ SCRATCHPAD ============ -->
+  <div class="scratch-scrim" id="scratchScrim"></div>
+  <aside class="scratch" id="scratch" aria-label="Scratchpad">
+    <div class="scratch-head">
+      <div class="scratch-title">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></svg>
+        <span>SCRATCHPAD</span>
+      </div>
+      <button class="icon-btn" id="scratchClose" aria-label="Close scratchpad">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div class="seg scratch-seg" id="scratchSeg">
+      <button data-mode="notes" class="active">Notes</button>
+      <button data-mode="sketch">Sketch</button>
+    </div>
+
+    <div class="scratch-body">
+      <!-- NOTES -->
+      <div class="scratch-notes" id="scratchNotes">
+        <div class="quick-grid">
+          <label class="qf"><span>ATIS</span><input id="qf-atis" type="text" maxlength="24" placeholder="Info / — " autocomplete="off" autocapitalize="characters" /></label>
+          <label class="qf"><span>Squawk</span><input id="qf-squawk" type="text" inputmode="numeric" maxlength="4" placeholder="1200" autocomplete="off" /></label>
+          <label class="qf"><span>Altimeter</span><input id="qf-altimeter" type="text" maxlength="8" placeholder="29.92" autocomplete="off" /></label>
+          <label class="qf"><span>Active RWY</span><input id="qf-runway" type="text" maxlength="6" placeholder="27" autocomplete="off" autocapitalize="characters" /></label>
+        </div>
+        <textarea id="scratchText" class="mono" placeholder="Clearances, frequencies, headings, notes…&#10;e.g. CRAFT — Cleared to…, Route…, Alt…, Freq…, Xpdr…"></textarea>
+      </div>
+
+      <!-- SKETCH -->
+      <div class="scratch-sketch" id="scratchSketch" hidden>
+        <div class="sketch-tools" id="sketchTools">
+          <button class="pen active" data-color="#22e3c8" style="--pen:#22e3c8" aria-label="Cyan pen"></button>
+          <button class="pen" data-color="#e7eef7" style="--pen:#e7eef7" aria-label="White pen"></button>
+          <button class="pen" data-color="#ffc043" style="--pen:#ffc043" aria-label="Amber pen"></button>
+          <button class="pen" data-color="#ff5a5f" style="--pen:#ff5a5f" aria-label="Red pen"></button>
+          <button class="tool" data-tool="eraser" id="eraserBtn" aria-label="Eraser">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 15l7-7 6 6-4 4H8l-4-3z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M9 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </button>
+          <button class="tool danger" data-tool="clear-sketch" aria-label="Clear sketch">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="sketchCanvas"></canvas>
+          <div class="canvas-hint" id="canvasHint">Draw with your finger or stylus</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scratch-foot">
+      <span class="hint" id="scratchStatus">Saved locally</span>
+      <button class="btn ghost small" id="scratchClearNotes">Clear notes</button>
+    </div>
+  </aside>
+
+  <!-- ============ OVERFLOW MENU ============ -->
+  <div class="popover" id="popover" hidden>
+    <button data-action="new-set">＋ New checklist set</button>
+    <button data-action="import">⭱ Import from file…</button>
+    <button data-action="export">⭳ Export current set…</button>
+    <button data-action="duplicate">⧉ Duplicate current set</button>
+    <button data-action="delete-set" class="danger">✕ Delete current set</button>
+    <div class="popover-sep"></div>
+    <label class="popover-switch">
+      <span>Auto-advance on complete</span>
+      <input type="checkbox" id="autoAdvance" />
+    </label>
+  </div>
+
+  <!-- ============ BUILDER MODAL ============ -->
+  <div class="modal-scrim" id="builderScrim" hidden>
+    <div class="modal builder" role="dialog" aria-label="Checklist builder">
+      <div class="modal-head">
+        <h2>Checklist Builder</h2>
+        <button class="icon-btn" id="builderClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="builderBody"></div>
+      <div class="modal-foot">
+        <span class="hint">Changes save automatically.</span>
+        <button class="btn primary" id="builderDone">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ITEM EDITOR MODAL ============ -->
+  <div class="modal-scrim" id="itemScrim" hidden>
+    <div class="modal small" role="dialog" aria-label="Edit item">
+      <div class="modal-head">
+        <h2 id="itemModalTitle">Add Item</h2>
+        <button class="icon-btn" id="itemClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Type</label>
+          <div class="seg" id="itemType">
+            <button data-type="item" class="active">Item</button>
+            <button data-type="note">Note</button>
+            <button data-type="caution">Caution</button>
+            <button data-type="warning">Warning</button>
+          </div>
+        </div>
+        <div class="field" id="fieldChallenge">
+          <label>Challenge (task)</label>
+          <input type="text" id="inChallenge" placeholder="e.g. Fuel Selector" />
+        </div>
+        <div class="field" id="fieldResponse">
+          <label>Response (state)</label>
+          <input type="text" id="inResponse" placeholder="e.g. BOTH" />
+        </div>
+        <div class="field" id="fieldText" hidden>
+          <label>Text</label>
+          <input type="text" id="inText" placeholder="Advisory or note text" />
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" id="itemCancel">Cancel</button>
+        <button class="btn primary" id="itemSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input for import -->
+  <input type="file" id="fileInput" accept=".json,application/json" hidden />
+
+  <!-- Toast -->
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="./data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
