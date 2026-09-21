@@ -113,6 +113,7 @@
     applyTheme(state.settings.theme, false);
     hydrateScratch();   // must run before wireEvents (it populates scratchEls used during wiring)
     wireEvents();
+    wireUiModal();
     hydratePdf();
     wirePdf();
     render();
@@ -390,11 +391,11 @@
     toast("Set duplicated");
   }
 
-  function deleteSet() {
+  async function deleteSet() {
     const set = activeSet();
     if (!set) return;
     if (state.sets.length <= 1) { toast("Keep at least one set"); return; }
-    if (!confirm(`Delete checklist set "${set.name}"? This cannot be undone.`)) return;
+    if (!(await uiConfirm(`Delete checklist set "${set.name}"? This cannot be undone.`, { danger: true }))) return;
     state.sets = state.sets.filter((s) => s.id !== set.id);
     delete state.progress[set.id];
     saveSets(); saveProgress();
@@ -592,7 +593,7 @@
     const [x] = arr.splice(idx, 1); arr.splice(ni, 0, x);
   }
 
-  function handleBuilderClick(e) {
+  async function handleBuilderClick(e) {
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
     const action = btn.dataset.action;
@@ -607,7 +608,7 @@
           checklists: [{ id: uid("cl"), name: "New Checklist", items: [] }] });
         break;
       case "del-group":
-        if (!confirm("Delete this group and all its checklists?")) return;
+        if (!(await uiConfirm("Delete this group and all its checklists?", { danger: true }))) return;
         set.groups = set.groups.filter((g) => g.id !== gId);
         break;
       case "move-group":
@@ -617,7 +618,7 @@
         getGroup(gId).checklists.push({ id: uid("cl"), name: "New Checklist", items: [] });
         break;
       case "del-cl": {
-        if (!confirm("Delete this checklist?")) return;
+        if (!(await uiConfirm("Delete this checklist?", { danger: true }))) return;
         const g = getGroup(gId);
         g.checklists = g.checklists.filter((c) => c.id !== cId);
         clearProgress(set.id, cId);
@@ -788,8 +789,8 @@
     if (del) { removeQuickField(del.dataset.key); return; }
     if (e.target.closest("#qfAdd")) addQuickField();
   }
-  function addQuickField() {
-    const label = prompt("New field name:", "");
+  async function addQuickField() {
+    const label = await uiPrompt("New field name:", { placeholder: "e.g. Wind", maxLength: 18 });
     if (label === null) return;
     const name = label.trim();
     if (!name) return;
@@ -797,10 +798,10 @@
     renderQuickFields();
     saveScratch(true);
   }
-  function removeQuickField(key) {
+  async function removeQuickField(key) {
     const f = state.scratch.fields.find((x) => x.key === key);
     if (!f) return;
-    if (f.value && f.value.trim() && !confirm(`Remove field "${f.label}" and its value?`)) return;
+    if (f.value && f.value.trim() && !(await uiConfirm(`Remove field "${f.label}" and its value?`, { danger: true }))) return;
     state.scratch.fields = state.scratch.fields.filter((x) => x.key !== key);
     renderQuickFields();
     saveScratch(true);
@@ -870,8 +871,8 @@
     $("#scratchDot").hidden = !has;
   }
 
-  function clearNotes() {
-    if (!confirm("Clear the notes and quick fields? (The sketch is kept.)")) return;
+  async function clearNotes() {
+    if (!(await uiConfirm("Clear the notes and quick fields? (The sketch is kept.)", { danger: true }))) return;
     state.scratch.text = "";
     state.scratch.fields.forEach((f) => { f.value = ""; });
     scratchEls.text.value = "";
@@ -975,8 +976,8 @@
     saveScratch();
   }
 
-  function clearSketch() {
-    if (!confirm("Clear the sketch?")) return;
+  async function clearSketch() {
+    if (!(await uiConfirm("Clear the sketch?", { danger: true }))) return;
     if (sketch.ctx) {
       const wrap = $("#canvasWrap");
       sketch.ctx.clearRect(0, 0, wrap.clientWidth, wrap.clientHeight);
@@ -1016,6 +1017,65 @@
       t.classList.remove("show");
       setTimeout(() => { t.hidden = true; }, 260);
     }, 2000);
+  }
+
+  /* ---------- in-app confirm / prompt ----------
+     Native dialogs are unreliable in standalone / home-screen PWAs (iOS
+     suppresses window.confirm/prompt, which then return without showing —
+     that is why "Clear" appeared to do nothing). We use an in-DOM modal. */
+  let uiModalResolve = null;
+  let uiModalMode = null;
+  function uiModalOpen() { return uiModalResolve != null; }
+  function uiModalFinish(result) {
+    const scrim = $("#uiModalScrim");
+    if (scrim) scrim.hidden = true;
+    const r = uiModalResolve;
+    uiModalResolve = null; uiModalMode = null;
+    if (r) r(result);
+  }
+  function uiConfirm(message, opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+      if (uiModalResolve) uiModalFinish(uiModalMode === "prompt" ? null : false);
+      uiModalResolve = resolve; uiModalMode = "confirm";
+      $("#uiModalMsg").textContent = message;
+      $("#uiModalInput").hidden = true;
+      const ok = $("#uiModalOk");
+      ok.textContent = opts.okLabel || "OK";
+      $("#uiModalCancel").textContent = opts.cancelLabel || "Cancel";
+      ok.classList.toggle("danger", !!opts.danger);
+      $("#uiModalScrim").hidden = false;
+      requestAnimationFrame(() => ok.focus());
+    });
+  }
+  function uiPrompt(message, opts) {
+    opts = opts || {};
+    return new Promise((resolve) => {
+      if (uiModalResolve) uiModalFinish(uiModalMode === "prompt" ? null : false);
+      uiModalResolve = resolve; uiModalMode = "prompt";
+      $("#uiModalMsg").textContent = message;
+      const inp = $("#uiModalInput");
+      inp.hidden = false;
+      inp.value = opts.value || "";
+      inp.placeholder = opts.placeholder || "";
+      inp.maxLength = opts.maxLength || 40;
+      const ok = $("#uiModalOk");
+      ok.textContent = opts.okLabel || "OK";
+      $("#uiModalCancel").textContent = opts.cancelLabel || "Cancel";
+      ok.classList.remove("danger");
+      $("#uiModalScrim").hidden = false;
+      requestAnimationFrame(() => { inp.focus(); inp.select(); });
+    });
+  }
+  function wireUiModal() {
+    $("#uiModalOk").addEventListener("click", () => uiModalFinish(uiModalMode === "prompt" ? $("#uiModalInput").value : true));
+    $("#uiModalCancel").addEventListener("click", () => uiModalFinish(uiModalMode === "prompt" ? null : false));
+    $("#uiModalScrim").addEventListener("mousedown", (e) => {
+      if (e.target === $("#uiModalScrim")) uiModalFinish(uiModalMode === "prompt" ? null : false);
+    });
+    $("#uiModalInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); uiModalFinish($("#uiModalInput").value); }
+    });
   }
 
   /* ============================================================ events */
@@ -1142,6 +1202,7 @@
     // keyboard: Esc closes topmost overlay; arrows switch checklists
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        if (uiModalOpen()) { uiModalFinish(uiModalMode === "prompt" ? null : false); return; }
         if (!$("#itemScrim").hidden) { $("#itemScrim").hidden = true; itemCtx = null; }
         else if (!$("#builderScrim").hidden) closeBuilder();
         else if (pdfPanelOpen()) closePdf();
@@ -1336,14 +1397,14 @@
     if (actBtn) {
       const id = actBtn.dataset.id;
       if (actBtn.dataset.action === "delete") {
-        if (!confirm("Supprimer ce document ?")) return;
+        if (!(await uiConfirm("Supprimer ce document ?", { danger: true }))) return;
         try { await pdfDelete(id); } catch (e2) {}
         await renderPdfList();
         toast("Document supprimé");
       } else if (actBtn.dataset.action === "rename") {
         const row = actBtn.closest(".pdf-row");
         const cur = row ? row.querySelector(".pdf-name").textContent : "";
-        const name = prompt("Nouveau nom :", cur);
+        const name = await uiPrompt("Nouveau nom :", { value: cur });
         if (name && name.trim()) { try { await pdfRename(id, name.trim()); } catch (e2) {} await renderPdfList(); }
       }
       return;

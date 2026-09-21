@@ -854,3 +854,14 @@ body {
 .pdf-page:last-child { margin-bottom: 0; }
 .pdf-page canvas { display: block; width: 100%; height: auto; }
 .pdf-msg { margin: 12vh auto; max-width: 340px; text-align: center; color: var(--txt-faint); font-size: 15px; }
+
+/* ============================================================ confirm/prompt modal */
+#uiModalScrim { z-index: 95; }
+.ui-modal-msg { margin: 6px 2px 0; font-size: 15.5px; line-height: 1.45; color: var(--txt); }
+.ui-modal-input {
+  width: 100%; box-sizing: border-box; height: 46px; margin-top: 14px; padding: 0 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+  color: var(--txt); font-size: 16px; font-weight: 600; outline: none; transition: border-color 0.15s;
+}
+.ui-modal-input:focus { border-color: var(--accent); }
+.btn.danger { background: var(--red); color: #fff; border-color: transparent; }

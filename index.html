@@ -291,6 +291,20 @@
     </div>
   </div>
 
+  <!-- ============ CONFIRM / PROMPT MODAL (replaces native dialogs) ============ -->
+  <div class="modal-scrim" id="uiModalScrim" hidden>
+    <div class="modal small" role="dialog" aria-modal="true" aria-labelledby="uiModalMsg">
+      <div class="modal-body">
+        <p class="ui-modal-msg" id="uiModalMsg"></p>
+        <input class="ui-modal-input" id="uiModalInput" type="text" autocomplete="off" hidden />
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" id="uiModalCancel">Cancel</button>
+        <button class="btn primary" id="uiModalOk">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Hidden file input for import -->
   <input type="file" id="fileInput" accept=".json,application/json" hidden />
 
