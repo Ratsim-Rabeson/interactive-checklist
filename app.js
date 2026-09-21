@@ -254,12 +254,26 @@
     $("#progressCount").textContent = `${checked}/${total}`;
   }
 
+  // The active checklist gates the Next control: any unchecked item blocks advancing.
+  // A checklist with no checkable rows (e.g. a briefing / notes-only) never blocks.
+  function currentIsComplete() {
+    const set = activeSet();
+    const found = set ? findChecklist(set, state.activeChecklistId) : null;
+    if (!found) return true;
+    const { checked, total } = progressOf(set.id, found.checklist);
+    return total === 0 || checked >= total;
+  }
+
   function setNavDisabled(disabled) {
     $("#resetBtn").disabled = disabled;
     const flat = flatten(activeSet());
     const i = flat.findIndex((f) => f.checklist.id === state.activeChecklistId);
     $("#prevBtn").disabled = disabled || i <= 0;
-    $("#nextBtn").disabled = disabled || i < 0 || i >= flat.length - 1;
+    const nextBtn = $("#nextBtn");
+    const atLast = i < 0 || i >= flat.length - 1;
+    const blockedIncomplete = !disabled && !atLast && !currentIsComplete();
+    nextBtn.disabled = disabled || atLast || blockedIncomplete;
+    nextBtn.title = blockedIncomplete ? "Cochez tous les éléments pour passer à la suivante" : "";
   }
 
   /* ============================================================ interactions */
@@ -290,6 +304,7 @@
     const { checked, total } = progressOf(set.id, found.checklist);
     updateRing(checked, total);
     updateNavBadge(set.id, found.checklist.id, checked, total);
+    setNavDisabled(false);   // re-gate Next now that completion may have changed
     maybeComplete(checked, total, true);
   }
 
