@@ -22,7 +22,7 @@
     activeChecklistId: null,
     progress: {},   // { setId: { checklistId: [checkedIdx...] } }
     settings: { autoAdvance: false },
-    scratch: { mode: "notes", fields: { atis: "", squawk: "", altimeter: "", runway: "", freqActive: "", freqNext: "" }, text: "", sketch: "" },
+    scratch: { mode: "notes", fields: [], text: "", sketch: "" },
   };
 
   /* ---------- tiny helpers ---------- */
@@ -95,7 +95,7 @@
     const sc = load(K.scratch, {}) || {};
     state.scratch = {
       mode: sc.mode === "sketch" ? "sketch" : "notes",
-      fields: Object.assign({ atis: "", squawk: "", altimeter: "", runway: "", freqActive: "", freqNext: "" }, sc.fields || {}),
+      fields: migrateQuickFields(sc.fields),
       text: typeof sc.text === "string" ? sc.text : "",
       sketch: typeof sc.sketch === "string" ? sc.sketch : "",
     };
@@ -722,22 +722,101 @@
   let sketch = { ctx: null, drawing: false, tool: "pen", color: "#22e3c8", lastX: 0, lastY: 0, dpr: 1, dirty: false };
   let scratchSaveTimer = null;
 
+  /* ---- quick fields: a user-editable list of avionics inputs ---- */
+  const DEFAULT_QF = [
+    { key: "atis", label: "ATIS" },
+    { key: "squawk", label: "Squawk" },
+    { key: "altimeter", label: "Altimeter" },
+    { key: "runway", label: "Active RWY" },
+    { key: "freqActive", label: "Active Freq" },
+    { key: "freqNext", label: "Next Freq" },
+  ];
+  // Accepts the legacy object form ({atis:"",...}) or the new array form and
+  // always returns an ordered [{key,label,value}] list.
+  function migrateQuickFields(raw) {
+    if (Array.isArray(raw)) {
+      const arr = raw.filter((f) => f && f.key).map((f) => ({
+        key: String(f.key),
+        label: String(f.label || f.key),
+        value: typeof f.value === "string" ? f.value : "",
+      }));
+      if (arr.length) return arr;
+    }
+    const obj = (raw && typeof raw === "object" && !Array.isArray(raw)) ? raw : {};
+    return DEFAULT_QF.map((d) => ({ key: d.key, label: d.label, value: typeof obj[d.key] === "string" ? obj[d.key] : "" }));
+  }
+  // Presentation hints (placeholder / keypad / maxlength) for the built-in keys.
+  function qfAttrs(key) {
+    switch (key) {
+      case "squawk":     return { ph: "1200", im: "numeric", ml: 4 };
+      case "altimeter":  return { ph: "29.92", im: "decimal", ml: 8 };
+      case "runway":     return { ph: "27", im: "", ml: 6 };
+      case "atis":       return { ph: "Info / —", im: "", ml: 24 };
+      case "freqActive": return { ph: "118.30", im: "decimal", ml: 7 };
+      case "freqNext":   return { ph: "121.90", im: "decimal", ml: 7 };
+      default:           return { ph: "", im: "", ml: 24 };
+    }
+  }
+  function renderQuickFields() {
+    const grid = $("#qfGrid");
+    if (!grid) return;
+    grid.innerHTML = state.scratch.fields.map((f) => {
+      const a = qfAttrs(f.key);
+      const im = a.im ? ` inputmode="${a.im}"` : "";
+      return `<div class="qf" data-key="${esc(f.key)}">
+          <div class="qf-top">
+            <span class="qf-label">${esc(f.label)}</span>
+            <button class="qf-del" data-key="${esc(f.key)}" aria-label="Remove field" title="Remove">×</button>
+          </div>
+          <input class="qf-input" data-key="${esc(f.key)}" type="text" value="${esc(f.value)}"${im} maxlength="${a.ml}" placeholder="${esc(a.ph)}" autocomplete="off" />
+        </div>`;
+    }).join("") +
+      `<button class="qf-add" id="qfAdd" type="button" aria-label="Add field">＋<span>Field</span></button>`;
+  }
+  function onQfInput(e) {
+    const inp = e.target.closest(".qf-input");
+    if (!inp) return;
+    const key = inp.dataset.key;
+    if (key === "squawk") inp.value = inp.value.replace(/\D/g, "").slice(0, 4);
+    else if (key === "atis" || key === "runway") inp.value = inp.value.toUpperCase();
+    const f = state.scratch.fields.find((x) => x.key === key);
+    if (f) f.value = inp.value;
+    saveScratch();
+  }
+  function onQfClick(e) {
+    const del = e.target.closest(".qf-del");
+    if (del) { removeQuickField(del.dataset.key); return; }
+    if (e.target.closest("#qfAdd")) addQuickField();
+  }
+  function addQuickField() {
+    const label = prompt("New field name:", "");
+    if (label === null) return;
+    const name = label.trim();
+    if (!name) return;
+    state.scratch.fields.push({ key: uid("qf"), label: name.slice(0, 18), value: "" });
+    renderQuickFields();
+    saveScratch(true);
+  }
+  function removeQuickField(key) {
+    const f = state.scratch.fields.find((x) => x.key === key);
+    if (!f) return;
+    if (f.value && f.value.trim() && !confirm(`Remove field "${f.label}" and its value?`)) return;
+    state.scratch.fields = state.scratch.fields.filter((x) => x.key !== key);
+    renderQuickFields();
+    saveScratch(true);
+  }
+
   function hydrateScratch() {
     scratchEls.panel = $("#scratch");
     scratchEls.scrim = $("#scratchScrim");
     scratchEls.text = $("#scratchText");
-    scratchEls.fields = {
-      atis: $("#qf-atis"), squawk: $("#qf-squawk"),
-      altimeter: $("#qf-altimeter"), runway: $("#qf-runway"),
-      freqActive: $("#qf-freq-active"), freqNext: $("#qf-freq-next"),
-    };
     scratchEls.canvas = $("#sketchCanvas");
     scratchEls.hint = $("#canvasHint");
     scratchEls.status = $("#scratchStatus");
 
     // populate persisted values
     scratchEls.text.value = state.scratch.text;
-    for (const k in scratchEls.fields) scratchEls.fields[k].value = state.scratch.fields[k] || "";
+    renderQuickFields();
     setScratchMode(state.scratch.mode, false);
     updateScratchDot();
   }
@@ -765,7 +844,6 @@
 
   function flushScratchFromInputs() {
     state.scratch.text = scratchEls.text.value;
-    for (const k in scratchEls.fields) state.scratch.fields[k] = scratchEls.fields[k].value;
   }
 
   function saveScratch(immediate) {
@@ -788,16 +866,16 @@
 
   function updateScratchDot() {
     const s = state.scratch;
-    const has = !!(s.text.trim() || s.sketch || Object.values(s.fields).some((v) => v && v.trim()));
+    const has = !!(s.text.trim() || s.sketch || s.fields.some((f) => f.value && f.value.trim()));
     $("#scratchDot").hidden = !has;
   }
 
   function clearNotes() {
     if (!confirm("Clear the notes and quick fields? (The sketch is kept.)")) return;
     state.scratch.text = "";
-    for (const k in state.scratch.fields) state.scratch.fields[k] = "";
+    state.scratch.fields.forEach((f) => { f.value = ""; });
     scratchEls.text.value = "";
-    for (const k in scratchEls.fields) scratchEls.fields[k].value = "";
+    renderQuickFields();
     saveScratch(true);
     toast("Notes cleared");
   }
@@ -1031,14 +1109,9 @@
       if (b) setScratchMode(b.dataset.mode);
     });
     $("#scratchText").addEventListener("input", () => { flushScratchFromInputs(); saveScratch(); });
-    Object.entries(scratchEls.fields).forEach(([key, el]) => {
-      el.addEventListener("input", () => {
-        if (key === "squawk") el.value = el.value.replace(/\D/g, "").slice(0, 4);
-        else if (key === "atis" || key === "runway") el.value = el.value.toUpperCase();
-        flushScratchFromInputs();
-        saveScratch();
-      });
-    });
+    const qfGrid = $("#qfGrid");
+    qfGrid.addEventListener("input", onQfInput);
+    qfGrid.addEventListener("click", onQfClick);
     $("#scratchClearNotes").addEventListener("click", clearNotes);
 
     // sketch tools
