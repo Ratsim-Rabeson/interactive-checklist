@@ -834,6 +834,7 @@ body {
   padding: 16px 12px calc(24px + var(--safe-b));
   background: var(--bg-0);
 }
+.pdf-pages-inner { transform-origin: 0 0; }
 .pdf-page {
   position: relative; margin: 0 auto 14px;
   background: #fff; border-radius: 4px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); overflow: hidden;

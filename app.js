@@ -1329,7 +1329,11 @@
       el.style.height = Math.round(w * pdfRatio) + "px";
       frag.appendChild(el);
     }
-    pdfEls.pages.appendChild(frag);
+    const inner = document.createElement("div");
+    inner.className = "pdf-pages-inner";
+    inner.appendChild(frag);
+    pdfEls.pages.appendChild(inner);
+    pdfEls.inner = inner;
     setupPdfObserver();
     pdfEls.pageInfo.textContent = "1 / " + n;
   }
@@ -1367,11 +1371,9 @@
     pdfRenderTasks = pdfRenderTasks.filter((t) => t !== task);
   }
 
-  function pdfSetZoom(delta) {
-    if (!pdfDoc) return;
-    const next = Math.min(3, Math.max(0.5, Math.round((pdfZoom + delta) * 100) / 100));
-    if (next === pdfZoom) return;
-    pdfZoom = next;
+  function clampZoom(z) { return Math.min(4, Math.max(0.5, z)); }
+
+  function relayoutPdfPages() {
     const w = pdfPageWidth();
     $$(".pdf-page", pdfEls.pages).forEach((el) => {
       el.dataset.rendered = ""; el.dataset.rendering = "";
@@ -1380,6 +1382,44 @@
       el.style.height = Math.round(w * pdfRatio) + "px";
     });
     setupPdfObserver();
+  }
+
+  function pdfSetZoom(delta) {
+    if (!pdfDoc) return;
+    const next = clampZoom(Math.round((pdfZoom + delta) * 100) / 100);
+    if (next === pdfZoom) return;
+    pdfZoom = next;
+    relayoutPdfPages();
+  }
+
+  // Pinch-to-zoom inside the viewer: during the gesture we scale the pages with a
+  // cheap CSS transform (smooth, GPU); when the fingers lift we commit the new zoom
+  // and re-rasterize the pages at full resolution so they stay crisp.
+  let pdfPinch = null;
+  function pdfTouchDist(t) {
+    return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  }
+  function pdfTouchStart(e) {
+    if (!pdfDoc || !pdfEls.inner || e.touches.length !== 2) return;
+    const rect = pdfEls.inner.getBoundingClientRect();
+    const ox = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+    const oy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+    pdfPinch = { dist: pdfTouchDist(e.touches) || 1, zoom: pdfZoom, live: pdfZoom };
+    pdfEls.inner.style.transformOrigin = ox + "px " + oy + "px";
+    e.preventDefault();
+  }
+  function pdfTouchMove(e) {
+    if (!pdfPinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    pdfPinch.live = clampZoom(pdfPinch.zoom * (pdfTouchDist(e.touches) / pdfPinch.dist));
+    pdfEls.inner.style.transform = "scale(" + (pdfPinch.live / pdfPinch.zoom) + ")";
+  }
+  function pdfTouchEnd(e) {
+    if (!pdfPinch || e.touches.length >= 2) return;
+    const finalZoom = pdfPinch.live;
+    pdfPinch = null;
+    if (pdfEls.inner) { pdfEls.inner.style.transform = ""; pdfEls.inner.style.transformOrigin = ""; }
+    if (Math.abs(finalZoom - pdfZoom) > 0.001) { pdfZoom = finalZoom; relayoutPdfPages(); }
   }
 
   function pdfOnScroll() {
@@ -1408,6 +1448,10 @@
     $("#pdfBack").addEventListener("click", () => { teardownPdfDoc(); pdfEls.pages.innerHTML = ""; showPdfLibrary(); });
     $("#pdfZoomIn").addEventListener("click", () => pdfSetZoom(0.25));
     $("#pdfZoomOut").addEventListener("click", () => pdfSetZoom(-0.25));
+    pdfEls.pages.addEventListener("touchstart", pdfTouchStart, { passive: false });
+    pdfEls.pages.addEventListener("touchmove", pdfTouchMove, { passive: false });
+    pdfEls.pages.addEventListener("touchend", pdfTouchEnd);
+    pdfEls.pages.addEventListener("touchcancel", pdfTouchEnd);
     pdfEls.list.addEventListener("click", onPdfListClick);
   }
 
