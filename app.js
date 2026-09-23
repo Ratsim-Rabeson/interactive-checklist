@@ -88,10 +88,11 @@
     const savedSets = load(K.sets, null);
     state.sets = Array.isArray(savedSets) && savedSets.length ? savedSets : clone(window.DEFAULT_SETS || []);
     state.progress = load(K.progress, {}) || {};
-    state.settings = Object.assign({ autoAdvance: false }, load(K.settings, {}));
+    state.settings = Object.assign({ autoAdvance: false, navLayout: "sidebar" }, load(K.settings, {}));
     if (state.settings.theme !== "light" && state.settings.theme !== "dark") {
       state.settings.theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
     }
+    if (state.settings.navLayout !== "tabs") state.settings.navLayout = "sidebar";
     const sc = load(K.scratch, {}) || {};
     state.scratch = {
       mode: sc.mode === "sketch" ? "sketch" : "notes",
@@ -111,6 +112,7 @@
 
     saveSets();
     applyTheme(state.settings.theme, false);
+    applyNavLayout(state.settings.navLayout, false);
     hydrateScratch();   // must run before wireEvents (it populates scratchEls used during wiring)
     wireEvents();
     wireUiModal();
@@ -137,10 +139,30 @@
     toast(next === "light" ? "Light mode" : "Dark mode");
   }
 
+  /* ---------- nav layout (sidebar vs horizontal tabs) ---------- */
+  function applyNavLayout(layout, persist) {
+    const l = layout === "tabs" ? "tabs" : "sidebar";
+    state.settings.navLayout = l;
+    document.getElementById("app").classList.toggle("layout-tabs", l === "tabs");
+    if (persist) saveSettings();
+  }
+  function setNavLayout(layout) {
+    applyNavLayout(layout, true);
+    syncLayoutSeg();
+    renderTabbar();
+    // Element just became visible; measure once layout has settled.
+    requestAnimationFrame(positionTabUnderline);
+  }
+  function syncLayoutSeg() {
+    $$("#navLayoutSeg button").forEach((b) =>
+      b.classList.toggle("active", b.dataset.layout === state.settings.navLayout));
+  }
+
   /* ============================================================ RENDER */
   function render() {
     renderSetSelect();
     renderNav();
+    renderTabbar();
     renderChecklist();
   }
 
@@ -184,6 +206,72 @@
 
   function typeLabel(t) {
     return ({ normal: "NORMAL", abnormal: "ABNORMAL", emergency: "EMERGENCY", briefing: "BRIEFING" }[t] || "NORMAL");
+  }
+
+  /* ---------- horizontal tab bar (level 1: groups, level 2: checklists) ---------- */
+  // Which group's checklists are shown in the tab bar. Follows the active
+  // checklist by default; a group-tab tap changes it without selecting a checklist.
+  let tabGroupId = null;
+
+  function groupIdOf(set, clId) {
+    const found = findChecklist(set, clId);
+    return found ? found.group.id : null;
+  }
+
+  function renderTabbar() {
+    const bar = $("#tabbar");
+    if (!bar) return;
+    const set = activeSet();
+    if (!set || !set.groups.length) { bar.innerHTML = ""; return; }
+
+    // Keep the shown group valid; default to the active checklist's group.
+    if (!set.groups.some((g) => g.id === tabGroupId)) {
+      tabGroupId = groupIdOf(set, state.activeChecklistId) || set.groups[0].id;
+    }
+    const shown = set.groups.find((g) => g.id === tabGroupId) || set.groups[0];
+
+    const tabs = set.groups.map((g) => {
+      const type = g.type || "normal";
+      const on = g.id === tabGroupId;
+      return `<button class="tab type-${esc(type)} ${on ? "active" : ""}" data-gid="${esc(g.id)}" data-type="${esc(type)}" role="tab" aria-selected="${on}">${esc(g.name)}</button>`;
+    }).join("");
+
+    const chips = shown.checklists.map((c) => {
+      const { checked, total } = progressOf(set.id, c);
+      const done = total > 0 && checked === total;
+      const active = c.id === state.activeChecklistId;
+      return `
+        <button class="chip ${active ? "active" : ""} ${done ? "done" : ""}" data-cl="${esc(c.id)}">
+          <span class="chip-check"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 12l4 4 10-10" stroke="currentColor" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="chip-name">${esc(c.name)}</span>
+          <span class="chip-badge">${checked}/${total}</span>
+        </button>`;
+    }).join("") || `<span style="padding:8px 4px;color:var(--txt-faint);font-size:13px">No checklists in this group.</span>`;
+
+    bar.innerHTML = `
+      <div class="tabbar-groups" role="tablist">
+        ${tabs}
+        <span class="tab-underline" aria-hidden="true"></span>
+      </div>
+      <div class="tabbar-chips">${chips}</div>`;
+
+    positionTabUnderline();
+  }
+
+  function positionTabUnderline() {
+    const bar = document.getElementById("tabbar");
+    if (!bar) return;
+    const groups = bar.querySelector(".tabbar-groups");
+    const underline = bar.querySelector(".tab-underline");
+    const active = bar.querySelector(".tab.active");
+    if (!groups || !underline || !active) return;
+    underline.style.width = active.offsetWidth + "px";
+    underline.style.transform = `translateX(${active.offsetLeft}px)`;
+    underline.className = "tab-underline type-" + (active.dataset.type || "normal");
+    // Keep the active group tab in view when the row overflows.
+    const left = active.offsetLeft, right = left + active.offsetWidth;
+    if (left < groups.scrollLeft) groups.scrollLeft = left - 12;
+    else if (right > groups.scrollLeft + groups.clientWidth) groups.scrollLeft = right - groups.clientWidth + 12;
   }
 
   function renderChecklist() {
@@ -280,8 +368,10 @@
   /* ============================================================ interactions */
   function selectChecklist(clId) {
     state.activeChecklistId = clId;
+    tabGroupId = groupIdOf(activeSet(), clId) || tabGroupId;   // tab bar follows the selection
     saveActive();
     renderNav();
+    renderTabbar();
     renderChecklist();
     $("#items").scrollTop = 0;
     document.getElementById("app").classList.remove("nav-open");
@@ -310,11 +400,19 @@
   }
 
   function updateNavBadge(setId, clId, checked, total) {
+    const done = total > 0 && checked === total;
     const btn = $(`.nav-item[data-cl="${clId}"]`);
-    if (!btn) return;
-    const badge = btn.querySelector(".ni-badge");
-    if (badge) badge.textContent = `${checked}/${total}`;
-    btn.classList.toggle("done", total > 0 && checked === total);
+    if (btn) {
+      const badge = btn.querySelector(".ni-badge");
+      if (badge) badge.textContent = `${checked}/${total}`;
+      btn.classList.toggle("done", done);
+    }
+    const chip = $(`.chip[data-cl="${clId}"]`);
+    if (chip) {
+      const cb = chip.querySelector(".chip-badge");
+      if (cb) cb.textContent = `${checked}/${total}`;
+      chip.classList.toggle("done", done);
+    }
   }
 
   let completeTimer = null;
@@ -345,6 +443,7 @@
     clearProgress(set.id, state.activeChecklistId);
     renderChecklist();
     renderNav();
+    renderTabbar();
     toast("Checklist reset");
   }
 
@@ -361,6 +460,7 @@
     state.activeSetId = setId;
     const flat = flatten(activeSet());
     state.activeChecklistId = (flat[0] && flat[0].checklist.id) || null;
+    tabGroupId = null;   // let renderTabbar default to the new set's active group
     saveActive();
     render();
   }
@@ -1001,8 +1101,11 @@
   /* ============================================================ popover + toast */
   function togglePopover() {
     const p = $("#popover");
-    if (p.hidden) { $("#autoAdvance").checked = !!state.settings.autoAdvance; p.hidden = false; }
-    else p.hidden = true;
+    if (p.hidden) {
+      $("#autoAdvance").checked = !!state.settings.autoAdvance;
+      syncLayoutSeg();
+      p.hidden = false;
+    } else p.hidden = true;
   }
   function closePopover() { $("#popover").hidden = true; }
 
@@ -1086,6 +1189,14 @@
       if (btn) selectChecklist(btn.dataset.cl);
     });
 
+    // tab bar: chip selects a checklist; group tab just switches the shown group
+    $("#tabbar").addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (chip) { selectChecklist(chip.dataset.cl); return; }
+      const tab = e.target.closest(".tab");
+      if (tab && tab.dataset.gid !== tabGroupId) { tabGroupId = tab.dataset.gid; renderTabbar(); }
+    });
+
     // item toggling (delegated)
     $("#items").addEventListener("click", (e) => {
       const row = e.target.closest(".item");
@@ -1128,6 +1239,10 @@
     $("#autoAdvance").addEventListener("change", (e) => {
       state.settings.autoAdvance = e.target.checked; saveSettings();
       toast(e.target.checked ? "Auto-advance on" : "Auto-advance off");
+    });
+    $("#navLayoutSeg").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-layout]");
+      if (b) setNavLayout(b.dataset.layout);
     });
     document.addEventListener("click", (e) => {
       if (!$("#popover").hidden && !e.target.closest("#popover") && !e.target.closest("#menuBtn")) closePopover();
@@ -1194,6 +1309,7 @@
 
     let resizeTimer = null;
     window.addEventListener("resize", () => {
+      positionTabUnderline();   // pixel-positioned underline must track width changes
       if (!scratchOpen() || state.scratch.mode !== "sketch") return;
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => { if (sketch.ctx) saveSketch(); setupCanvas(); }, 150);

@@ -77,6 +77,9 @@
 
       <!-- ============ MAIN CONTENT ============ -->
       <main class="content" id="content">
+        <!-- Horizontal tab bar (shown only in tabs layout) -->
+        <div class="tabbar" id="tabbar" aria-label="Checklists"></div>
+
         <section class="checklist-head">
           <div class="ch-head-left">
             <span class="ch-badge" id="chBadge">NORMAL</span>
@@ -233,6 +236,13 @@
       <span>Auto-advance on complete</span>
       <input type="checkbox" id="autoAdvance" />
     </label>
+    <div class="popover-row">
+      <span>Menu</span>
+      <div class="layout-seg" id="navLayoutSeg" role="group" aria-label="Menu layout">
+        <button type="button" data-layout="sidebar">Latéral</button>
+        <button type="button" data-layout="tabs">Onglets</button>
+      </div>
+    </div>
   </div>
 
   <!-- ============ BUILDER MODAL ============ -->

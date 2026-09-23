@@ -261,6 +261,86 @@ body {
 
 .nav-scrim { display: none; }
 
+/* ============================================================ tab-bar layout */
+/* Default (sidebar) layout hides the tab bar; the tabs layout hides the sidebar. */
+.tabbar { display: none; }
+.app.layout-tabs .nav { display: none; }
+.app.layout-tabs .tabbar {
+  display: block; flex: 0 0 auto;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, rgba(15,26,43,0.55), transparent);
+}
+/* No slide-in drawer in tabs mode, so the hamburger is meaningless. */
+.app.layout-tabs .menu-toggle { display: none; }
+
+/* Level 1 — group tabs with a sliding underline */
+.tabbar-groups {
+  position: relative;
+  display: flex; gap: 2px;
+  padding: 6px 12px 0;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tabbar-groups::-webkit-scrollbar { display: none; }
+.tab {
+  flex: 0 0 auto;
+  padding: 12px 14px 13px;
+  background: transparent; border: none;
+  color: var(--txt-dim);
+  font-size: 12.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  white-space: nowrap; cursor: pointer;
+  transition: color 0.15s ease;
+}
+.tab:hover { color: var(--txt); }
+.tab.active { color: var(--txt); }
+.tab.type-emergency.active { color: var(--red); }
+.tab.type-abnormal.active { color: var(--amber); }
+.tab.type-briefing.active { color: var(--accent-2); }
+.tab-underline {
+  position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
+  border-radius: 3px 3px 0 0; background: var(--accent);
+  transform: translateX(0);
+  transition: transform 0.28s cubic-bezier(0.2,0.8,0.2,1),
+              width 0.28s cubic-bezier(0.2,0.8,0.2,1), background 0.2s ease;
+  pointer-events: none;
+}
+.tab-underline.type-emergency { background: var(--red); }
+.tab-underline.type-abnormal { background: var(--amber); }
+.tab-underline.type-briefing { background: var(--accent-2); }
+
+/* Level 2 — checklist chips for the selected group */
+.tabbar-chips {
+  display: flex; gap: 8px;
+  padding: 10px 12px;
+  overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tabbar-chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 999px;
+  border: 1px solid var(--line-soft); background: var(--panel);
+  color: var(--txt); font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.15s;
+}
+.chip:hover { border-color: var(--line); }
+.chip:active { transform: scale(0.98); }
+.chip.active { background: linear-gradient(135deg, rgba(34,227,200,0.16), rgba(18,182,255,0.10)); border-color: rgba(34,227,200,0.45); }
+.chip-check { display: none; color: var(--go); }
+.chip.done .chip-check { display: inline-flex; }
+.chip.done { opacity: 0.6; }
+.chip.done .chip-name { text-decoration: line-through; }
+.chip-badge {
+  font-size: 11px; font-weight: 700; color: var(--txt-dim);
+  padding: 2px 7px; border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+}
+.chip.done .chip-badge { color: var(--go); border-color: rgba(47,224,138,0.4); background: rgba(47,224,138,0.12); }
+
 /* ============================================================ content */
 .content {
   flex: 1; min-width: 0;
@@ -472,6 +552,22 @@ body {
   padding: 9px 12px; font-size: 14px; color: var(--txt-dim);
 }
 .popover-switch input { width: 40px; height: 24px; }
+.popover-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px; font-size: 14px; color: var(--txt-dim);
+}
+.popover .layout-seg {
+  display: flex; gap: 4px;
+  background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: 10px; padding: 3px;
+}
+.popover .layout-seg button {
+  padding: 6px 12px; border: none; border-radius: 7px;
+  background: transparent; color: var(--txt-dim);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.popover .layout-seg button:hover { background: transparent; color: var(--txt); }
+.popover .layout-seg button.active { background: var(--panel-2); color: var(--txt); box-shadow: inset 0 0 0 1px var(--line); }
 
 /* ============================================================ modals */
 .modal-scrim {
