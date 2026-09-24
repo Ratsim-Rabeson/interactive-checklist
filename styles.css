@@ -312,7 +312,7 @@ body {
 /* Level 2 — checklist chips for the selected group */
 .tabbar-chips {
   display: flex; gap: 8px;
-  padding: 10px 12px;
+  padding: 18px 12px 12px;
   overflow-x: auto; overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
